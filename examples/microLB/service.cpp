@@ -22,7 +22,7 @@
 static void print_stats(int);
 #define STATS_PERIOD  5s
 
-#include "../LiveUpdate/liu.hpp"
+#include "liu_helpers/liu.hpp"
 static void save_state(liu::Storage& store, const liu::buffer_t*)
 {
 
