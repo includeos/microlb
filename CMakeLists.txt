@@ -7,32 +7,61 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(LIVEUPDATE "Enable liveupdate" ON)
 option(TLS "Enable secure connections" ON)
 
-  # standard conan installation, deps will be defined in conanfile.py
-  # and not necessary to call conan again, conan is already running
-include(${CMAKE_CURRENT_BINARY_DIR}/conanbuildinfo.cmake)
-conan_basic_setup()
+if (EXISTS ${CMAKE_CURRENT_BINARY_DIR}/conanbuildinfo.cmake)
+  include(${CMAKE_CURRENT_BINARY_DIR}/conanbuildinfo.cmake)
+  conan_basic_setup()
+else()
+  if (NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+  endif()
+  if (CONAN_PROFILE)
+    set(CONANPROFILE PROFILE ${CONAN_PROFILE})
+  endif()
+  if(NOT EXISTS "${CMAKE_BINARY_DIR}/conan.cmake")
+     message(STATUS "Downloading conan.cmake from https://github.com/conan-io/cmake-conan")
+     file(DOWNLOAD "https://github.com/conan-io/cmake-conan/raw/v0.13/conan.cmake"
+                   "${CMAKE_BINARY_DIR}/conan.cmake")
+  endif()
+  include(${CMAKE_BINARY_DIR}/conan.cmake)
+  conan_cmake_run(
+    CONANFILE conanfile.py
+    BASIC_SETUP
+    ${CONANPROFILE}
+  )
+endif()
+
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+if (NOT ARCH)
+  set(ARCH ${CMAKE_SYSTEM_PROCESSOR})
+endif()
 
 add_definitions(-DARCH_${ARCH})
 add_definitions(-DARCH="${ARCH}")
 
 set(LIBRARY_SRCS
-  micro_lb/autoconf.cpp
-  micro_lb/balancer.cpp
-  micro_lb/defaults.cpp
+  src/autoconf.cpp
+  src/balancer.cpp
+  src/defaults.cpp
 )
 
 if (TLS)
   list(APPEND LIBRARY_SRCS
-    micro_lb/openssl.cpp
+    src/openssl.cpp
   )
 endif()
 
 
 if (LIVEUPDATE)
   list(APPEND LIBRARY_SRCS
-    micro_lb/serialize.cpp
+    src/serialize.cpp
   )
 endif()
+
+set(HDRS
+  include/microLB
+  include/balancer.hpp
+)
 
 # microLB static library
 add_library(microlb STATIC ${LIBRARY_SRCS})
@@ -40,16 +69,10 @@ add_library(microlb STATIC ${LIBRARY_SRCS})
 if (LIVEUPDATE)
   set_target_properties(microlb PROPERTIES COMPILE_DEFINITIONS "LIVEUPDATE")
 endif()
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../api)
 
-if (NOT CONAN_EXPORTED)
-  target_include_directories(microlb PUBLIC ${INCLUDEOS_ROOT}/api/posix)
-  target_include_directories(microlb PUBLIC ${INCLUDEOS_ROOT}/src/include)
-  target_include_directories(microlb PUBLIC ${INCLUDEOS_ROOT}/api)
-  target_include_directories(microlb PUBLIC ${INCLUDEOS_ROOT}/lib/LiveUpdate)
-  SET(PREFIX ${ARCH}/)
-endif()
+set_target_properties(microlb PROPERTIES PUBLIC_HEADER "${HDRS}")
 
-install(TARGETS microlb DESTINATION ${PREFIX}lib)
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/micro_lb/balancer.hpp DESTINATION ${PREFIX}include/micro_lb)
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/microLB DESTINATION ${PREFIX}include)
+install(TARGETS microlb
+        ARCHIVE DESTINATION lib
+        PUBLIC_HEADER DESTINATION include
+)
