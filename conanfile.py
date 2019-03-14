@@ -27,6 +27,7 @@ class MicroLBConan(ConanFile):
     description = 'Run your application with zero overhead'
     generators = 'cmake'
     url = "http://www.includeos.org/"
+    no_copy_source=True
     scm = {
         "type" : "git",
         "url" : "auto",
