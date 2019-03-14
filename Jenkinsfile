@@ -50,7 +50,7 @@ pipeline {
         stage('build example') {
           steps {
             sh script: "mkdir -p build_example", label: "Setup"
-            sh script: "cd build_example; conan install ../examples/microLB -pr $PROFILE_x86_64 -u", label: "conan_install"
+            sh script: "cd build_example; conan install ../examples/microLB -pr $PROFILE_x86_64", label: "conan_install"
             sh script: "cd build_example; cmake ../examples/microLB",label: "cmake configure"
             sh script: "cd build_example; make -j $CPUS", label: "building example"
             //sh script: "cd build_example; source activate.sh; cmake ../unit/integration/simple", label: "cmake configure"
