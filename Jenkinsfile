@@ -1,55 +1,31 @@
 pipeline {
   agent { label 'ubuntu-18.04' }
-
-  triggers {
-    upstream(
-      upstreamProjects: 'hioa-cs-org-test/IncludeOS/dev', threshold: hudson.model.Result.SUCCESS
-      )
-  }
-
-  options {
-    checkoutToSubdirectory('src')
-  }
-
+  triggers { upstream( upstreamProjects: 'IncludeOS/IncludeOS/master, IncludeOS/IncludeOS/dev', threshold: hudson.model.Result.SUCCESS ) }
+  options { checkoutToSubdirectory('src') }
   environment {
     CONAN_USER_HOME = "${env.WORKSPACE}"
     PROFILE_x86_64 = 'clang-6.0-linux-x86_64'
     CPUS = """${sh(returnStdout: true, script: 'nproc')}"""
     PACKAGE = 'microlb'
     USER = 'includeos'
-    CHAN = 'default'
+    CHAN_LATEST = 'latest'
+    CHAN_STABLE = 'stable'
     REMOTE = "${env.CONAN_REMOTE}"
     BINTRAY_CREDS = credentials('devops-includeos-user-pass-bintray')
     SRC = "${env.WORKSPACE}/src"
   }
 
   stages {
-    stage('Conan channel') {
-      parallel {
-        stage('Pull request') {
-          when { changeRequest() }
-          steps { script { CHAN = 'test' } }
-        }
-        stage('Master merge') {
-          when { branch 'master' }
-          steps { script { CHAN = 'latest' } }
-        }
-        stage('Stable release') {
-          when { buildingTag() }
-          steps { script { CHAN = 'stable' } }
-        }
-      }
-    }
     stage('Setup') {
       steps {
         sh script: "ls -A | grep -v src | xargs rm -r || :", label: "Clean workspace"
         sh script: "conan config install https://github.com/includeos/conan_config.git", label: "conan config install"
       }
     }
-    // TODO add unittests
     stage('Build package') {
       steps {
-        build_conan_package("$PROFILE_x86_64")
+        build_conan_package("$PROFILE_x86_64", "$CHAN_LATEST")
+        script { VERSION = sh(script: "conan inspect -a version $SRC | cut -d ' ' -f 2", returnStdout: true).trim() }
       }
     }
     stage('build example') {
@@ -62,24 +38,32 @@ pipeline {
       }
     }
     stage('Upload to bintray') {
-      when {
-        anyOf {
-          branch 'master'
-          buildingTag()
+      parallel {
+        stage('Latest release') {
+          when { branch 'master' }
+          steps {
+            upload_package("$CHAN_LATEST")
+          }
         }
-      }
-      steps {
-        sh script: """
-          conan user -p $BINTRAY_CREDS_PSW -r $REMOTE $BINTRAY_CREDS_USR
-          VERSION=\$(conan inspect -a version $SRC | cut -d " " -f 2)
-          conan upload --all -r $REMOTE $PACKAGE/\$VERSION@$USER/$CHAN
-        """, label: "Upload to bintray"
+        stage('Stable release') {
+          when { buildingTag() }
+          steps {
+            sh script: "conan copy --all $PACKAGE/$VERSION@$USER/$CHAN_LATEST $USER/$CHAN_STABLE", label: "Copy to stable channel"
+            upload_package("$CHAN_STABLE")
+          }
+        }
       }
     }
   }
 }
 
+def build_conan_package(String profile, String channel) {
+  sh script: "conan create $SRC $USER/$channel -pr ${profile}", label: "Build with profile: $profile"
+}
 
-def build_conan_package(String profile) {
-  sh script: "conan create $SRC $USER/$CHAN -pr ${profile}", label: "Build with profile: $profile"
+def upload_package(String channel) {
+  sh script: """
+    conan user -p $BINTRAY_CREDS_PSW -r $REMOTE $BINTRAY_CREDS_USR
+    conan upload --all -r $REMOTE $PACKAGE/$VERSION@$USER/$channel
+  """, label: "Upload to bintray"
 }
