@@ -7,94 +7,79 @@ pipeline {
       )
   }
 
+  options {
+    checkoutToSubdirectory('src')
+  }
+
   environment {
     CONAN_USER_HOME = "${env.WORKSPACE}"
     PROFILE_x86_64 = 'clang-6.0-linux-x86_64'
-    PROFILE_x86 = 'clang-6.0-linux-x86'
     CPUS = """${sh(returnStdout: true, script: 'nproc')}"""
-    CC = 'clang-6.0'
-    CXX = 'clang++-6.0'
     PACKAGE = 'microlb'
     USER = 'includeos'
-    CHAN = 'test'
+    CHAN = 'default'
     REMOTE = "${env.CONAN_REMOTE}"
     BINTRAY_CREDS = credentials('devops-includeos-user-pass-bintray')
+    SRC = "${env.WORKSPACE}/src"
   }
 
   stages {
+    stage('Conan channel') {
+      parallel {
+        stage('Pull request') {
+          when { changeRequest() }
+          steps { script { CHAN = 'test' } }
+        }
+        stage('Master merge') {
+          when { branch 'master' }
+          steps { script { CHAN = 'latest' } }
+        }
+        stage('Stable release') {
+          when { buildingTag() }
+          steps { script { CHAN = 'stable' } }
+        }
+      }
+    }
     stage('Setup') {
       steps {
+        sh script: "ls -A | grep -v src | xargs rm -r || :", label: "Clean workspace"
         sh script: "conan config install https://github.com/includeos/conan_config.git", label: "conan config install"
       }
     }
-    stage('Pull Request pipeline') {
-      when { changeRequest() }
-      stages {
-        /* TODO add unittests
-        stage('Unit tests') {
-          steps {
-            //cmake cache is bad
-            sh script: "mkdir -p unittests && rm -rf unittests/*", label: "Setup"
-            sh script: "cd unittests; cmake ../unit", label: "cmake configure"
-            sh script: "cd unittests; make -j $CPUS", label: "build tests"
-            sh script: "cd unittests; ctest --output-on-failure", label: "run unit tests"
-          }
-        }*/
-
-
-        stage('Build package') {
-          steps {
-            build_conan_package("$PROFILE_x86_64")
-          }
-        }
-        stage('build example') {
-          steps {
-            sh script: "mkdir -p build_example", label: "Setup"
-            sh script: "cd build_example; conan install ../examples/microLB -pr $PROFILE_x86_64", label: "conan_install"
-            sh script: "cd build_example; cmake ../examples/microLB",label: "cmake configure"
-            sh script: "cd build_example; make -j $CPUS", label: "building example"
-            //sh script: "cd build_example; source activate.sh; cmake ../unit/integration/simple", label: "cmake configure"
-            //sh script: "cd build_example; source activate.sh; make", label: "build"
-          }
+    // TODO add unittests
+    stage('Build package') {
+      steps {
+        build_conan_package("$PROFILE_x86_64")
+      }
+    }
+    stage('build example') {
+      steps {
+        dir('build_example') {
+          sh script: "conan install $SRC/examples/microLB -pr $PROFILE_x86_64", label: "conan_install"
+          sh script: ". ./activate.sh; cmake $SRC/examples/microLB",label: "cmake configure"
+          sh script: "make -j $CPUS", label: "building example"
         }
       }
     }
-    stage('Deploy package pipeline') {
+    stage('Upload to bintray') {
       when {
         anyOf {
           branch 'master'
+          buildingTag()
         }
       }
-      stages {
-        stage('Build Conan package') {
-          steps {
-            //TODO foreach profile ?
-            build_conan_package("$PROFILE_x86_64")
-          }
-        }
-        stage('Upload to bintray') {
-          steps {
-            sh script: """
-              conan user -p $BINTRAY_CREDS_PSW -r $REMOTE $BINTRAY_CREDS_USR
-              VERSION=\$(conan inspect -a version . | cut -d " " -f 2)
-              conan upload --all -r $REMOTE $PACKAGE/\$VERSION@$USER/$CHAN
-            """, label: "Upload to bintray"
-          }
-        }
+      steps {
+        sh script: """
+          conan user -p $BINTRAY_CREDS_PSW -r $REMOTE $BINTRAY_CREDS_USR
+          VERSION=\$(conan inspect -a version $SRC | cut -d " " -f 2)
+          conan upload --all -r $REMOTE $PACKAGE/\$VERSION@$USER/$CHAN
+        """, label: "Upload to bintray"
       }
-    }
-  }
-  post {
-    cleanup {
-      sh script: """
-        VERSION=\$(conan inspect -a version . | cut -d " " -f 2)
-        conan remove $PACKAGE/\$VERSION@$USER/$CHAN -f || echo 'Could not remove. This does not fail the pipeline'
-      """, label: "Cleaning up and removing conan package"
     }
   }
 }
 
 
 def build_conan_package(String profile) {
-  sh script: "conan create . $USER/$CHAN -pr ${profile}", label: "Build with profile: $profile"
+  sh script: "conan create $SRC $USER/$CHAN -pr ${profile}", label: "Build with profile: $profile"
 }
