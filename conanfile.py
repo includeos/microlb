@@ -8,7 +8,7 @@ class MicroLBConan(ConanFile):
     version = conan_tools.git_get_semver()
     license = 'Apache-2.0'
     description = 'Run your application with zero overhead'
-    generators = 'cmake'
+    generators = 'cmake', 'virtualenv'
     url = "http://www.includeos.org/"
     no_copy_source=True
     scm = {

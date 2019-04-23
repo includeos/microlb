@@ -1,7 +1,22 @@
+// This file is a part of the IncludeOS unikernel - www.includeos.org
+//
+// Copyright 2018-2019 IncludeOS AS, Oslo, Norway
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #pragma once
-#include <net/socket.hpp>
-#include <liveupdate>
-#include <util/timer.hpp>
+
+#include "nodes.hpp"
 namespace net {
   class Inet;
 }
@@ -9,20 +24,6 @@ namespace net {
 namespace microLB
 {
   typedef net::Inet netstack_t;
-  typedef net::tcp::Connection_ptr tcp_ptr;
-  typedef delegate<void()> pool_signal_t;
-
-  typedef delegate<void(net::Stream_ptr)> node_connect_result_t;
-  typedef std::chrono::milliseconds timeout_t;
-  typedef delegate<void(timeout_t, node_connect_result_t)> node_connect_function_t;
-
-  struct DeserializationHelper
-  {
-    net::Inet* clients = nullptr;
-    net::Inet* nodes   = nullptr;
-    void* cli_ctx = nullptr;
-    void* nod_ctx = nullptr;
-  };
 
   struct Waiting {
     Waiting(net::Stream_ptr);
@@ -33,101 +34,6 @@ namespace microLB
 
     net::Stream_ptr conn;
     int total = 0;
-  };
-
-  struct Nodes;
-  struct Session {
-    Session(Nodes&, int idx, net::Stream_ptr in, net::Stream_ptr out);
-    bool is_alive() const;
-    void handle_timeout();
-    void timeout(Nodes&);
-#if defined(LIVEUPDATE)
-    void serialize(liu::Storage&);
-#endif
-    Nodes&     parent;
-    const int  self;
-    net::Stream_ptr incoming;
-    net::Stream_ptr outgoing;
-
-    void flush_incoming();
-    void flush_outgoing();
-  };
-
-  struct Balancer;
-  struct Node {
-    Node(Balancer&, net::Socket, node_connect_function_t,
-         bool do_active = true, int idx = -1);
-
-    auto address() const noexcept { return m_socket; }
-    int  connection_attempts() const noexcept { return this->connecting; }
-    int  pool_size() const noexcept { return pool.size(); }
-    bool is_active() const noexcept { return active; }
-    bool active_check() const noexcept { return do_active_check; }
-
-    void restart_active_check();
-    void perform_active_check(int);
-    void stop_active_check();
-    void connect();
-    net::Stream_ptr get_connection();
-
-  private:
-    node_connect_function_t m_connect = nullptr;
-    pool_signal_t           m_pool_signal = nullptr;
-    std::vector<net::Stream_ptr> pool;
-    net::Socket m_socket;
-    int         m_idx;
-    bool        active = false;
-    const bool  do_active_check;
-    int32_t     active_timer = -1;
-    int32_t     connecting = 0;
-  };
-
-  struct Nodes {
-    typedef std::deque<Node> nodevec_t;
-    typedef nodevec_t::iterator iterator;
-    typedef nodevec_t::const_iterator const_iterator;
-
-    Nodes(Balancer& b, bool ac) : m_lb(b), do_active_check(ac) {}
-
-    size_t   size() const noexcept;
-    const_iterator begin() const;
-    const_iterator end() const;
-
-    int32_t open_sessions() const;
-    int64_t total_sessions() const;
-    int32_t timed_out_sessions() const;
-    int  pool_connecting() const;
-    int  pool_size() const;
-
-    template <typename... Args>
-    void add_node(Args&&... args);
-    void create_connections(int total);
-    // returns the connection back if the operation fails
-    net::Stream_ptr assign(net::Stream_ptr);
-    Session& create_session(net::Stream_ptr inc, net::Stream_ptr out);
-    void     close_session(int);
-    void destroy_sessions();
-    Session& get_session(int);
-    void     close_all_sessions();
-#if defined(LIVEUPDATE)
-    void serialize(liu::Storage&);
-    void deserialize(liu::Restore&, DeserializationHelper&);
-#endif
-    // make the microLB more testable
-    delegate<void(int idx, int current, int total)> on_session_close = nullptr;
-
-  private:
-    Balancer& m_lb;
-    nodevec_t nodes;
-    int64_t   session_total = 0;
-    int       session_cnt = 0;
-    int       conn_iterator = 0;
-    int       algo_iterator = 0;
-    const bool do_active_check;
-    Timer cleanup_timer;
-    std::deque<Session> sessions;
-    std::deque<int> free_sessions;
-    std::deque<int> closed_sessions;
   };
 
   struct Balancer {
@@ -177,9 +83,4 @@ namespace microLB
     delegate<void()> tls_free = nullptr;
   };
 
-  template <typename... Args>
-  inline void Nodes::add_node(Args&&... args) {
-    nodes.emplace_back(m_lb, std::forward<Args> (args)...,
-                       this->do_active_check, nodes.size());
-  }
 }
