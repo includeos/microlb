@@ -78,15 +78,6 @@ namespace microLB
     }
     return conn;
   }
-  size_t Nodes::size() const noexcept {
-    return nodes.size();
-  }
-  Nodes::const_iterator Nodes::begin() const {
-    return nodes.cbegin();
-  }
-  Nodes::const_iterator Nodes::end() const {
-    return nodes.cend();
-  }
   int Nodes::pool_connecting() const {
     int count = 0;
     for (auto& node : nodes) count += node.connection_attempts();
@@ -96,15 +87,6 @@ namespace microLB
     int count = 0;
     for (auto& node : nodes) count += node.pool_size();
     return count;
-  }
-  int32_t Nodes::open_sessions() const {
-    return session_cnt;
-  }
-  int64_t Nodes::total_sessions() const {
-    return session_total;
-  }
-  int32_t Nodes::timed_out_sessions() const {
-    return 0;
   }
   Session& Nodes::create_session(net::Stream_ptr client, net::Stream_ptr outgoing)
   {

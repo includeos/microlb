@@ -37,9 +37,6 @@ namespace microLB
         nodes.close_session(idx);
     });
   }
-  bool Session::is_alive() const {
-    return incoming != nullptr;
-  }
 
   void Session::flush_incoming()
   {

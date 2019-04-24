@@ -51,8 +51,8 @@ namespace microLB
     // Setup and automatic resume (if applicable)
     // NOTE: Be sure to have configured it properly BEFORE calling this
 
-    int  wait_queue() const;
-    int  connect_throws() const;
+    inline int  wait_queue() const;
+    inline int  connect_throws() const noexcept;
     // add a client stream to the load balancer
     // NOTE: the stream must be connected prior to calling this function
     void incoming(net::Stream_ptr);
@@ -64,7 +64,7 @@ namespace microLB
 #endif
 
     Nodes nodes;
-    pool_signal_t get_pool_signal();
+    inline pool_signal_t get_pool_signal();
     DeserializationHelper de_helper;
 
   private:
@@ -82,5 +82,12 @@ namespace microLB
     void* tls_context = nullptr;
     delegate<void()> tls_free = nullptr;
   };
+
+  int Balancer::wait_queue() const
+  { return this->queue.size(); }
+  int Balancer::connect_throws() const noexcept
+  { return this->throw_counter; }
+  pool_signal_t Balancer::get_pool_signal()
+  { return {this, &Balancer::handle_queue}; }
 
 }

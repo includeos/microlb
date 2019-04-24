@@ -45,13 +45,12 @@ namespace microLB
 
     Nodes(Balancer& b, bool ac) : m_lb(b), do_active_check(ac) {}
 
-    size_t   size() const noexcept;
-    const_iterator begin() const;
-    const_iterator end() const;
-
-    int32_t open_sessions() const;
-    int64_t total_sessions() const;
-    int32_t timed_out_sessions() const;
+    inline size_t   size() const noexcept;
+    inline const_iterator begin() const;
+    inline const_iterator end() const;
+    inline int32_t open_sessions() const noexcept;
+    inline int64_t total_sessions() const noexcept;
+    inline int32_t timed_out_sessions() const noexcept;
     int  pool_connecting() const;
     int  pool_size() const;
 
@@ -91,4 +90,17 @@ namespace microLB
     nodes.emplace_back(m_lb, std::forward<Args> (args)...,
                        this->do_active_check, nodes.size());
   }
+
+  size_t Nodes::size() const noexcept
+  { return nodes.size(); }
+  Nodes::const_iterator Nodes::begin() const
+  { return nodes.cbegin(); }
+  Nodes::const_iterator Nodes::end() const
+  { return nodes.cend(); }
+  int32_t Nodes::open_sessions() const noexcept
+  { return session_cnt; }
+  int64_t Nodes::total_sessions() const noexcept
+  { return session_total; }
+  int32_t Nodes::timed_out_sessions() const noexcept
+  { return 0; }
 }

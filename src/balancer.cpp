@@ -40,16 +40,6 @@ namespace microLB
     nodes.close_all_sessions();
     if (tls_free) tls_free();
   }
-  int Balancer::wait_queue() const {
-    return this->queue.size();
-  }
-  int Balancer::connect_throws() const {
-    return this->throw_counter;
-  }
-  pool_signal_t Balancer::get_pool_signal()
-  {
-    return {this, &Balancer::handle_queue};
-  }
   void Balancer::incoming(net::Stream_ptr conn)
   {
       assert(conn != nullptr);

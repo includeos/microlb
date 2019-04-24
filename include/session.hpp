@@ -25,7 +25,7 @@ namespace microLB
   struct Nodes;
   struct Session {
     Session(Nodes&, int idx, net::Stream_ptr in, net::Stream_ptr out);
-    bool is_alive() const;
+    inline bool is_alive() const noexcept;
 #if defined(LIVEUPDATE)
     void serialize(liu::Storage&);
 #endif
@@ -38,4 +38,7 @@ namespace microLB
     void flush_incoming();
     void flush_outgoing();
   };
+
+  bool Session::is_alive() const noexcept
+  { return incoming != nullptr; }
 }
